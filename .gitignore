@@ -1,0 +1,91 @@
+# --- Secrets & local env (never commit) ---
+.env
+.env.*
+!.env.example
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+id_rsa*
+id_ed25519*
+credentials.json
+service-account*.json
+secrets/
+.secrets/
+**/secrets/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+dist/
+build/
+pip-wheel-metadata/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.nox/
+.cache/
+
+# --- Virtualenvs ---
+.venv/
+venv/
+env/
+env_l7/
+ENV/
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# --- App runtime data & generated output ---
+/data/**
+!/data/.gitkeep
+job_application/data/jobs/**
+!job_application/data/jobs/.gitkeep
+job_application/output/**
+!job_application/output/.gitkeep
+!job_application/output/templates/
+!job_application/output/templates/**
+
+# Personal / local CV workshop copies (PII)
+cv/yuliia_old/
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+.cursor/
+
+# --- Notebooks / local scratch ---
+*.ipynb_checkpoints/
+*.ipynb
+*.log
+tmp/
+temp/
+.tmp/
+
+# --- Databases & dumps ---
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql.gz

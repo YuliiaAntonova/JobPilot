@@ -1,0 +1,66 @@
+{
+  "basics": {
+    "name": null,
+    "headline": null,
+    "location": null,
+    "email": null,
+    "phone": null,
+    "summary": null,
+    "note": null,
+    "links": [
+      {
+        "label": null,
+        "text": null,
+        "url": null
+      }
+    ]
+  },
+  "skills": [
+    {
+      "group": null,
+      "items": []
+    }
+  ],
+  "experience": [
+    {
+      "company": null,
+      "title": null,
+      "location": null,
+      "period": null,
+      "project_context": null,
+      "bullets": []
+    }
+  ],
+  "experience_earlier": [
+    {
+      "period": null,
+      "company": null,
+      "role": null,
+      "location": null,
+      "project_context": null,
+      "stack": []
+    }
+  ],
+  "selected_projects": [
+    {
+      "name": null,
+      "url": null,
+      "bullets": []
+    }
+  ],
+  "education": [
+    {
+      "degree": null,
+      "school": null,
+      "period": null,
+      "note": null
+    }
+  ],
+  "certifications": [],
+  "languages": [
+    {
+      "name": null,
+      "level": null
+    }
+  ]
+}

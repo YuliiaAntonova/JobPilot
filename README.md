@@ -1,72 +1,73 @@
 # JobPilot
 
-Job application assistant: resume chat, ATS/JobBERT scoring, and L7 CrewAI resume tailoring — FastAPI backend + React SPA.
+Resume chat, JobBERT score, CrewAI tailor — FastAPI + React SPA.
 
-## Features
+## Docker
 
-- **Resume via chat** — `POST /profile/from-chat`, PostgreSQL `resume_profiles`
-- **ATS / score** — `POST /analyze/job-description` (JobBERT)
-- **Resume tailor (L7 CrewAI)** — Researcher → Profiler → Resume Strategist → Markdown → Harvard `cv.yml` / PDF  
-  API: `/analyze/resume-tailor/analyze|generate|preview|pdf`  
-  Legacy: `TAILORING_PIPELINE=notebook`
-- **Job drafts**, JWT auth, portal UI
-- **cv/** — workshop render helpers (`render.py`, HTML/PDF)
-
-Optional migration notes: [`MIGRATE_RESUME_TAILORING_L7.md`](MIGRATE_RESUME_TAILORING_L7.md).
-
-## Requirements
-
-- **Python 3.11** (CrewAI 0.28)
-- **Node.js 18+** (frontend build)
-- **PostgreSQL**
-
-## Setup
+### 1. First time only
 
 ```bash
-# 1) Python env
-python3.11 -m venv env_l7
-source env_l7/bin/activate
-pip install -r requirements.txt
-pip install -e .
-
-# 2) Secrets (never commit .env)
 cp .env.example .env
-# Fill: DATABASE_URL, OPENAI_API_KEY, CURSOR_API_KEY / GROQ_API_KEY, JOB_APP_JWT_SECRET
-
-# 3) Frontend
-cd frontend && npm install && npm run build && cd ..
-
-# 4) Run API
-uvicorn job_application.main:app --reload --port 8000
+# fill: JOB_APP_JWT_SECRET, OPENAI_API_KEY, LLAMA_CLOUD_API_KEY
 ```
 
-Open: http://127.0.0.1:8000/
+Defaults: `APP_LLM_MODEL=openai:gpt-4o-mini`, `OPENAI_MODEL_NAME=gpt-4o-mini`, `EMBED_BACKEND=openai`.
 
-### Quick UI check
+Then build once (slow, ~minutes, image ~4GB: torch + Chromium + npm):
 
-1. Sign in / open a job with a JD  
-2. Ensure the cabinet has a structured resume (chat or PDF)  
-3. **Analyze** → **Generate** (crew may take several minutes)  
-4. Check preview / PDF  
+```bash
+docker compose up --build -d
+docker compose logs -f api
+```
 
-Generate logs appear in the uvicorn terminal (`Working Agent` / `=== Usage ===`). Disable with `JOB_APP_CREW_VERBOSE=0`.
+Open http://127.0.0.1:8000/ → **Register**.
 
-## Environment
+### 2. Every next start (no build)
 
-Copy `.env.example` → `.env`. Important keys:
+```bash
+docker compose up -d
+docker compose logs -f api
+```
 
-| Variable | Purpose |
-|----------|---------|
-| `DATABASE_URL` | PostgreSQL SQLAlchemy URL |
-| `JOB_APP_JWT_SECRET` | JWT signing secret (≥32 chars recommended) |
-| `OPENAI_API_KEY` | CrewAI L7 tailor + md→json |
-| `OPENAI_MODEL_NAME` | Default `gpt-4o-mini` |
-| `TAILORING_PIPELINE` | `crew_l7` (default) or `notebook` |
-| `CURSOR_API_KEY` | Chat / default `APP_LLM_MODEL` |
-| `APP_LLM_MODEL` | e.g. `cursor:composer-2.5` or `groq:...` |
-| `GROQ_API_KEY` | Optional Groq models |
+| Command | When |
+|---------|------|
+| `docker compose up -d` | Usual start. Fast. Uses existing image. |
+| `docker compose logs -f api` | Watch uvicorn / CrewAI / LLM logs. |
+| `docker compose down` | Stop containers (DB + data volumes keep). |
+| `docker compose ps` | Status. |
 
-`.env` is gitignored. Only `.env.example` is tracked.
+### 3. When you need `--build`
+
+`--build` is **slow**. Use only if something that goes **into the image** changed:
+
+| Changed | Need `--build`? |
+|---------|-----------------|
+| Nothing / only `.env` | **No** — `docker compose up -d --force-recreate api` |
+| `job_application/`, `cv/`, `alembic/`, `frontend/src/` | **Yes** — code is copied into the image |
+| `requirements.txt`, `Dockerfile`, `frontend/package-lock.json` | **Yes** — and will reinstall heavy deps |
+
+```bash
+docker compose up --build -d
+docker compose logs -f api
+```
+
+### Ports & data
+
+| What | Where |
+|------|--------|
+| App | http://127.0.0.1:8000/ |
+| Postgres (host) | `localhost:5433` (`jobpilot` / `jobpilot` / `job_application`) |
+| Volumes | `pgdata`, `app_data` — wipe with `docker compose down -v` |
+
+## Optional: local without Docker
+
+```bash
+python3.11 -m venv env_l7 && source env_l7/bin/activate
+pip install -r requirements.txt && pip install -e .
+cp .env.example .env   # set DATABASE_URL + keys
+cd frontend && npm ci && npm run build && cd ..
+uvicorn job_application.main:app --reload --port 8000
+```
 
 ## Tests
 
@@ -74,9 +75,3 @@ Copy `.env.example` → `.env`. Important keys:
 source env_l7/bin/activate
 PYTHONPATH=. python -m pytest tests/ -q
 ```
-
-## Notes
-
-- Cover letter in L7 generate is empty; legacy `POST /analyze/cover-letter` uses the notebook path.
-- HITL / wizard flows were removed in this slim build.
-- Do not commit API keys, `.env`, personal CVs under `cv/yuliia_old/`, or local `data/` / `output/` files.

@@ -394,9 +394,11 @@ async def save_profile_from_resume(
     parser = DefaultResumePdfParser()
     try:
         if raw:
-            text, structured, _seed = parser.parse_bytes(pdf_filename, raw)
+            text, structured, _seed = await parser.parse_bytes(
+                pdf_filename, raw, model=llm_model
+            )
         elif text:
-            text, structured, _seed = parser.parse_text(text)
+            text, structured, _seed = await parser.parse_text(text, model=llm_model)
         else:
             raise ValueError("PDF/TXT file or resume_text is required (minimum 20 characters).")
     except ValueError as e:
@@ -406,7 +408,6 @@ async def save_profile_from_resume(
 
         raise HTTPException(status_code=502, detail=f"LLM error: {llm_error_message(e)}") from e
 
-    from job_application.resume.profile_service import attach_resume_template
     plain = structured_profile_to_plain_text(structured)
     profile = profile_dict_from_structured(structured, profile_text=plain, source="pdf")
     saved = db_users.upsert_profile(

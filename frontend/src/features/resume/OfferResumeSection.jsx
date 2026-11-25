@@ -28,6 +28,7 @@ export default function OfferResumeSection({
   jdText,
   jobId,
   companyName = "",
+  jobTitle = "",
   onPersist,
   onSaveHint,
   initialUseCabinetProfile = true,
@@ -123,6 +124,10 @@ export default function OfferResumeSection({
       return null;
     }
     // Never re-run JobBERT here — top "Calculate score" already did it
+    const company =
+      String(companyName || analysis?.company_name || analysis?.company || "").trim();
+    const title =
+      String(jobTitle || analysis?.job_title || analysis?.target_job_title || "").trim();
     const r = await authFetchWithTimeout("/analyze/resume-tailor/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -131,6 +136,8 @@ export default function OfferResumeSection({
         structured,
         model: llmModel,
         include_jobbert: false,
+        ...(company ? { company_name: company } : {}),
+        ...(title ? { job_title: title } : {}),
       }),
       timeoutMs: llmRequestTimeoutMs(llmModel),
     });
@@ -150,7 +157,18 @@ export default function OfferResumeSection({
       jobbert_score_before: data.jobbert_score_before ?? analysis?.match_score,
     });
     return data;
-  }, [analysis?.match_score, jdText, llmModel, persistResumeTailoring]);
+  }, [
+    analysis?.company,
+    analysis?.company_name,
+    analysis?.job_title,
+    analysis?.match_score,
+    analysis?.target_job_title,
+    companyName,
+    jdText,
+    jobTitle,
+    llmModel,
+    persistResumeTailoring,
+  ]);
 
   const applyPreviewResponse = useCallback(
     async (data, fallbackStructured) => {
@@ -295,6 +313,10 @@ export default function OfferResumeSection({
         setSafeTailorErr("A structured profile is required (chat or PDF in your cabinet).");
         return;
       }
+      const company =
+        String(companyName || analysis?.company_name || analysis?.company || "").trim();
+      const title =
+        String(jobTitle || analysis?.job_title || analysis?.target_job_title || "").trim();
       const r = await authFetchWithTimeout("/analyze/resume-tailor/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -305,6 +327,8 @@ export default function OfferResumeSection({
           selected_ids: selectedFactIds,
           model: llmModel,
           include_jobbert: false,
+          ...(company ? { company_name: company } : {}),
+          ...(title ? { job_title: title } : {}),
         }),
         timeoutMs: resumeTailorGenerateTimeoutMs(),
       });
@@ -375,7 +399,9 @@ export default function OfferResumeSection({
   }, [
     analysis,
     askUserItems,
+    companyName,
     jdText,
+    jobTitle,
     llmModel,
     onSaveHint,
     persistAnalysis,

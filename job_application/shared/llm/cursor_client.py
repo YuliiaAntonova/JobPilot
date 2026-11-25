@@ -50,7 +50,7 @@ def _format_cursor_run_error(result: Any) -> str:
         lines.append(f"Run ID: {run_id}")
     lines.append(
         "Check CURSOR_API_KEY and model (APP_LLM_MODEL). "
-        "For resume parsing you can set CV_YAML_LLM_FALLBACK=groq:… or openai:… in .env."
+        "Check CURSOR_API_KEY / APP_LLM_MODEL, or switch APP_LLM_MODEL to openai:… / groq:…."
     )
     return "\n".join(lines)
 

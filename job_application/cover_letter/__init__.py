@@ -1,3 +1,5 @@
-"""Cover letter package — stub in slim build."""
+"""Cover letter generation (standalone — not notebook_tailoring)."""
 
-__all__: list[str] = []
+from job_application.cover_letter.service import resume_plain_text_for_letter, run_cover_letter
+
+__all__ = ["resume_plain_text_for_letter", "run_cover_letter"]

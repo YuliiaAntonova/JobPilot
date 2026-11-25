@@ -247,7 +247,7 @@ Benefits/Other Compensation
         }
         result = match_score.compute_hybrid_match_score("resume text here", "jd text here")
         self.assertEqual(result["match_score"], 67)
-        self.assertEqual(result["match_rank_label"], "Хорошее совпадение")
+        self.assertEqual(result["match_rank_label"], "Good match")
         self.assertEqual(result["scoring_method"], "jobbert_knowledge")
 
     def test_build_ats_suggestions_entity_pairs_not_full_jd_sentences(self):

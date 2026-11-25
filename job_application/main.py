@@ -17,11 +17,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-from sqlalchemy import inspect, text
-
-from job_application.config import JOBS_DIR, MATCH_SCORE_WARMUP
-from job_application.models.db import Base, engine
-from job_application.routers import analyze, auth, jobs, profile, root
+from job_application.config import JOBS_DIR, MATCH_SCORE_WARMUP, REPO_ROOT
+from job_application.application.router import router as jobs_router
+from job_application.resume.profile_router import router as profile_router
+from job_application.routers import analyze, auth, root
 
 load_dotenv()
 
@@ -55,27 +54,19 @@ def _ensure_dirs():
     JOBS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def _ensure_schema():
-    """create_all не добавляет колонки в существующие таблицы."""
-    insp = inspect(engine)
-    if insp.has_table("application_jobs"):
-        cols = {c["name"] for c in insp.get_columns("application_jobs")}
-        if "user_id" not in cols:
-            with engine.begin() as conn:
-                conn.execute(
-                    text(
-                        "ALTER TABLE application_jobs "
-                        "ADD COLUMN IF NOT EXISTS user_id VARCHAR(36) "
-                        "REFERENCES users(id)"
-                    )
-                )
+def _run_alembic_upgrade() -> None:
+    """Apply DB migrations (replaces create_all + manual ALTER TABLE)."""
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(REPO_ROOT / "alembic.ini"))
+    command.upgrade(cfg, "head")
 
 
 @app.on_event("startup")
 def _startup():
     _ensure_dirs()
-    Base.metadata.create_all(bind=engine)
-    _ensure_schema()
+    _run_alembic_upgrade()
     if MATCH_SCORE_WARMUP:
         from job_application.scoring.jobbert import warmup_jobbert_models
 
@@ -87,6 +78,6 @@ if SPA_STATIC_DIR.is_dir():
 
 app.include_router(root.router)
 app.include_router(auth.router)
-app.include_router(profile.router)
+app.include_router(profile_router)
 app.include_router(analyze.router)
-app.include_router(jobs.router)
+app.include_router(jobs_router)

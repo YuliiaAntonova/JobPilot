@@ -31,7 +31,12 @@ sentence-transformers>=2.7.0,<4
 regex>=2023.12.25,<2024.0.0
 numpy>=1.24
 PyYAML>=6.0
-liteparse
+
+# --- RAG prepare (LlamaCloud Parse + LlamaIndex, from crew_job notebook) ---
+llama-index-core
+llama-index-embeddings-huggingface
+llama-index-embeddings-openai
+llama_cloud
 
 # --- CrewAI L7 (from crew_job) ---
 # crewai 0.28.x needs pkg_resources; setuptools>=81 removed it
@@ -41,3 +46,4 @@ langchain==0.1.20
 langchain_community==0.0.38
 tiktoken==0.7.0
 openai
+alembic>=1.13

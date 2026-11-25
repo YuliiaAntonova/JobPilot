@@ -1,0 +1,72 @@
+# Git / IDE
+.git
+.cursor
+.idea
+.vscode
+*.md
+!README.md
+LICENSE
+MIGRATE_RESUME_TAILORING_L7.md
+
+# Secrets & local env
+.env
+.env.*
+!.env.example
+**/*.pem
+**/credentials.json
+**/secrets/
+
+# Python envs & caches
+env_l7/
+venv/
+.venv/
+ENV/
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+.eggs/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+.cache/
+
+# Node (rebuilt in frontend stage)
+frontend/node_modules/
+frontend/dist/
+npm-debug.log*
+yarn-error.log*
+.pnpm-store/
+
+# Host SPA build — image rebuilds via Vite into job_application/static/app
+job_application/static/app/
+
+# Runtime / local data
+data/**
+!data/.gitkeep
+!data/input/.gitkeep
+!data/output/.gitkeep
+!data/output/preview/.gitkeep
+!data/output/tailored/.gitkeep
+!data/storage/.gitkeep
+!data/storage/rag/.gitkeep
+!data/storage/jobs/.gitkeep
+job_application/data/jobs/**
+!job_application/data/jobs/.gitkeep
+job_application/output/**
+!job_application/output/.gitkeep
+!job_application/output/templates/
+!job_application/output/templates/**
+
+# Personal / scratch
+cv/yuliia_old/
+*.pdf
+*.ipynb
+*.ipynb_checkpoints/
+tmp/
+temp/
+.tmp/
+*.log
+tests/

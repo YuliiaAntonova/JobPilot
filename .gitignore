@@ -55,6 +55,23 @@ yarn-error.log*
 # --- App runtime data & generated output ---
 /data/**
 !/data/.gitkeep
+!/data/input/
+!/data/input/.gitkeep
+!/data/output/
+!/data/output/.gitkeep
+!/data/output/preview/
+!/data/output/preview/.gitkeep
+!/data/output/tailored/
+!/data/output/tailored/.gitkeep
+!/data/storage/
+!/data/storage/.gitkeep
+!/data/storage/rag/
+!/data/storage/rag/.gitkeep
+!/data/storage/jobs/
+!/data/storage/jobs/.gitkeep
+# Legacy runtime dirs (still ignored if present)
+data/rag_storage/
+data/jobs/
 job_application/data/jobs/**
 !job_application/data/jobs/.gitkeep
 job_application/output/**
@@ -62,8 +79,9 @@ job_application/output/**
 !job_application/output/templates/
 !job_application/output/templates/**
 
-# Personal / local CV workshop copies (PII)
+# Personal / local CV workshop copies (PII) and resume PDFs at repo root
 cv/yuliia_old/
+/*.pdf
 
 # --- IDE / OS ---
 .idea/

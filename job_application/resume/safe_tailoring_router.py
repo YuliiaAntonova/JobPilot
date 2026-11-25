@@ -29,6 +29,8 @@ class ResumeTailorAnalyzeBody(BaseModel):
     resume_text: str | None = None
     model: str | None = None
     include_jobbert: bool = True
+    company_name: str | None = None
+    job_title: str | None = None
 
 
 class ResumeTailorGenerateBody(BaseModel):
@@ -39,6 +41,8 @@ class ResumeTailorGenerateBody(BaseModel):
     selected_ids: list[str] = Field(default_factory=list)
     model: str | None = None
     include_jobbert: bool = True
+    company_name: str | None = None
+    job_title: str | None = None
 
 
 class ResumeTailorPdfBody(BaseModel):
@@ -86,6 +90,8 @@ async def resume_tailor_analyze(
                 resume_text=body.resume_text,
                 model=llm_model,
                 include_jobbert=body.include_jobbert,
+                company_name=body.company_name,
+                job_title=body.job_title,
             ),
         )
     except ValueError as e:
@@ -116,6 +122,8 @@ async def resume_tailor_generate(
                 selected_ids=body.selected_ids,
                 model=llm_model,
                 include_jobbert=body.include_jobbert,
+                company_name=body.company_name,
+                job_title=body.job_title,
             ),
         )
     except ValueError as e:

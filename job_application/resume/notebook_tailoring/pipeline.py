@@ -1,52 +1,17 @@
-"""End-to-end tailoring pipeline (Untitled.ipynb)."""
+"""End-to-end tailoring pipeline (Untitled.ipynb) — legacy TAILORING_PIPELINE=notebook."""
 
 from __future__ import annotations
 
 import json
-import re
 from typing import Any
 
+from job_application.cover_letter.extract import (
+    flatten_skills,
+    generate_cover_letter,
+    get_skill_match_score,
+)
 from job_application.resume.notebook_tailoring import json_parse
 from job_application.resume.notebook_tailoring import llm
-
-
-def flatten_skills(skills: Any) -> list[str]:
-    if isinstance(skills, dict):
-        flat: list[str] = []
-        for val in skills.values():
-            if isinstance(val, list):
-                flat.extend(str(v) for v in val)
-            elif isinstance(val, str):
-                flat.extend(s.strip() for s in re.split(r"[,;]", val) if s.strip())
-        return flat
-    if isinstance(skills, str):
-        return [s.strip() for s in re.split(r"[,;\n]", skills) if s.strip()]
-    if isinstance(skills, list):
-        return [str(x).strip() for x in skills if str(x).strip()]
-    return []
-
-
-def get_skill_match_score(
-    resume_skills: list[str],
-    job_skills: list[str],
-) -> tuple[float, list[str], list[str]]:
-    resume_skills_norm = [re.sub(r"[^\w\s]", "", skill.lower()) for skill in resume_skills]
-    job_skills_norm = [re.sub(r"[^\w\s]", "", skill.lower()) for skill in job_skills]
-
-    matched_skills: list[str] = []
-    for i, job_skill in enumerate(job_skills):
-        job_skill_norm = job_skills_norm[i]
-        if any(
-            job_skill_norm == resume_skill
-            or job_skill_norm in resume_skill
-            or resume_skill in job_skill_norm
-            for resume_skill in resume_skills_norm
-        ):
-            matched_skills.append(job_skill)
-
-    missing_skills = [skill for skill in job_skills if skill not in matched_skills]
-    match_score = (len(matched_skills) / len(job_skills) * 100) if job_skills else 0.0
-    return match_score, matched_skills, missing_skills
 
 
 def parse_job_description(job_desc_text: str) -> dict[str, Any]:
@@ -260,82 +225,6 @@ def tailor_headline_and_summary(
         if job_title and job_title.lower() not in (headline or "").lower():
             return job_title, summary
         return headline, summary
-
-
-def _strip_cover_letter_placeholders(text: str) -> str:
-    """Remove letterhead / bracket placeholders the model sometimes invents."""
-    lines = (text or "").splitlines()
-    cleaned: list[str] = []
-    placeholder_re = re.compile(
-        r"^\s*("
-        r"\[.*?\]"  # [Your Name], [Date], …
-        r"|Your Name|Your Address|Your Email|Your Phone(?: Number)?"
-        r"|City,\s*State,\s*Zip"
-        r")\s*$",
-        re.IGNORECASE,
-    )
-    for line in lines:
-        if placeholder_re.match(line.strip()):
-            continue
-        cleaned.append(line)
-    # Start at the greeting — drop leftover "Hiring Manager / Company" letterhead
-    dear_idx = next(
-        (i for i, line in enumerate(cleaned) if re.match(r"^\s*Dear\b", line, re.I)),
-        None,
-    )
-    if dear_idx is not None and dear_idx > 0:
-        cleaned = cleaned[dear_idx:]
-    while cleaned and not cleaned[0].strip():
-        cleaned.pop(0)
-    return "\n".join(cleaned).strip()
-
-
-def generate_cover_letter(
-    resume_info: dict[str, Any],
-    job_info: dict[str, Any],
-    match_score: float,
-    matched_skills: list[str],
-) -> str:
-    del match_score  # used by callers for UI; not needed in the letter body
-    name = str(resume_info.get("name") or "").strip() or "Candidate"
-    company = str(job_info.get("company_name") or "").strip() or "the company"
-    job_title = str(job_info.get("job_title") or "").strip() or "the position"
-
-    recent_experience = ""
-    if isinstance(resume_info.get("work_experience"), list) and resume_info["work_experience"]:
-        recent_experience = resume_info["work_experience"][0]
-
-    highlight_skills = matched_skills[:5]
-    values = str(job_info.get("company_values") or "").strip()
-    prompt = f"""
-Write a short, ready-to-send cover letter for {name} applying to "{job_title}" at {company}.
-
-Required structure (nothing else):
-1) Greeting line only, e.g. "Dear Hiring Manager," (or a named contact if known)
-2) 3–4 short body paragraphs
-3) Closing: "Sincerely," then the real candidate name on the next line: {name}
-
-Content guidelines:
-- Open with enthusiasm for this specific role and {company}
-- Highlight these skills when relevant: {', '.join(highlight_skills) or 'skills from the resume'}
-- Weave in this recent experience (facts only, do not invent): {recent_experience}
-- Optionally reflect alignment with: {values or 'the company mission'}
-- End with a brief thank-you and willingness to talk
-
-Hard constraints:
-- MAXIMALLY SIMPLE: no letterhead, no address block, no date line, no phone/email header
-- NEVER invent or print placeholders such as [Your Name], [Your Address], [City, State, Zip],
-  [Your Email], [Your Phone Number], [Date], or any other square-bracket fields
-- Do not invent employers, metrics, titles, or contact details that are not given above
-- Professional tone, about 220–280 words
-- Return ONLY the cover letter text — no commentary, no markdown fences
-"""
-    try:
-        raw = llm.generate_text(prompt, call_label="cover_letter")
-        return _strip_cover_letter_placeholders(raw)
-    except Exception as e:
-        print(f"[Error] Generating cover letter: {e}")
-        return "Error generating cover letter. Please try again."
 
 
 def generate_optimization_report(

@@ -8,11 +8,11 @@ from typing import Any
 
 from openai import OpenAI
 
-from job_application.resume.crew_tailoring.template_extractor import get_target_fields, validate_shape
+from job_application.resume.template_extractor import get_target_fields, validate_shape
 from job_application.resume.crew_tailoring.utils import get_openai_api_key, get_openai_model_name
 
-_PACKAGE_DIR = Path(__file__).resolve().parent
-DEFAULT_TEMPLATE = _PACKAGE_DIR / "cv_template.json"
+_RESUME_DIR = Path(__file__).resolve().parent.parent
+DEFAULT_TEMPLATE = _RESUME_DIR / "cv_template.json"
 
 
 def _strip_code_fence(text: str) -> str:
@@ -111,12 +111,45 @@ def _links_need_backfill(links: Any) -> bool:
     return False
 
 
+def _infer_link_label(url: str, text: str = "") -> str:
+    low = str(url or "").strip().lower()
+    if "linkedin.com" in low:
+        return "LinkedIn"
+    if "github.com" in low or "github.io" in low:
+        return "GitHub"
+    if "xing.com" in low:
+        return "Xing"
+    return str(text or "").strip() or "Link"
+
+
+def normalize_basics_link_labels(filled: dict[str, Any]) -> None:
+    """Ensure basics.links use platform labels (LinkedIn/GitHub), not raw handles."""
+    basics = filled.get("basics")
+    if not isinstance(basics, dict):
+        return
+    links = basics.get("links")
+    if not isinstance(links, list):
+        return
+    for ln in links:
+        if not isinstance(ln, dict):
+            continue
+        url = str(ln.get("url") or "").strip()
+        text = str(ln.get("text") or "").strip()
+        label = str(ln.get("label") or "").strip()
+        inferred = _infer_link_label(url, text)
+        if inferred in {"LinkedIn", "GitHub", "Xing"} and (
+            not label or label.casefold() == text.casefold()
+        ):
+            ln["label"] = inferred
+
+
 def backfill_basics_contacts(
     filled: dict[str, Any],
     contacts_source: dict[str, Any] | None,
 ) -> None:
     """Prefer real contacts from contacts_source for the HTML header."""
     if not contacts_source:
+        normalize_basics_link_labels(filled)
         return
     src_basics = contacts_source.get("basics") or {}
     dst_basics = filled.setdefault("basics", {})
@@ -129,6 +162,32 @@ def backfill_basics_contacts(
     src_links = src_basics.get("links") or []
     if src_links and _links_need_backfill(dst_basics.get("links")):
         dst_basics["links"] = src_links
+    else:
+        # Keep tailored URLs, but restore platform labels from the source profile
+        dst_links = dst_basics.get("links")
+        if isinstance(dst_links, list) and isinstance(src_links, list) and src_links:
+            by_host: dict[str, dict[str, Any]] = {}
+            for src in src_links:
+                if not isinstance(src, dict):
+                    continue
+                url = str(src.get("url") or "").strip().lower()
+                for host in ("linkedin.com", "github.com", "xing.com"):
+                    if host in url:
+                        by_host[host] = src
+            for dst in dst_links:
+                if not isinstance(dst, dict):
+                    continue
+                url = str(dst.get("url") or "").strip().lower()
+                for host, src in by_host.items():
+                    if host not in url:
+                        continue
+                    src_label = str(src.get("label") or "").strip()
+                    if src_label:
+                        dst["label"] = src_label
+                    if src.get("url") and _looks_like_placeholder(dst.get("url")):
+                        dst["url"] = src["url"]
+                    break
+    normalize_basics_link_labels(filled)
 
 
 def _resolve_markdown(
@@ -246,14 +305,6 @@ TAILORED RESUME MARKDOWN:
 
 def l7_json_to_slim_cv(filled: dict[str, Any]) -> dict[str, Any]:
     """Map L7 template keys (selected_projects) onto slim cv.yml before normalize_to_cv."""
-    data = dict(filled)
-    selected = data.pop("selected_projects", None)
-    projects = data.get("projects")
-    if isinstance(selected, list) and selected:
-        if not isinstance(projects, list) or not projects:
-            data["projects"] = selected
-    # Coerce cert objects left over
-    certs = data.get("certifications")
-    if isinstance(certs, list):
-        data["certifications"] = [_cert_to_scalar(x) for x in certs if x is not None]
-    return data
+    from job_application.resume.rag_prepare.normalize import l7_json_to_slim_cv as _map
+
+    return _map(filled)

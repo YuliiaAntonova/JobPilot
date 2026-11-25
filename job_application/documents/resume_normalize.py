@@ -22,7 +22,7 @@ def _has_structured_experience_bullets(structured: dict) -> bool:
 
 
 def normalize_structured_for_render(structured: dict) -> dict:
-    """All PDF export uses workshop cv.yml (cv/render.py + Chrome)."""
+    """All PDF export uses Harvard cv.yml render + Chrome."""
     from job_application.resume.cv_schema import is_cv_structured, normalize_to_cv
 
     if is_cv_structured(structured) or str(structured.get("chat_format") or "") == "cv_yml":

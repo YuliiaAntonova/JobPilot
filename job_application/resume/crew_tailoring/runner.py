@@ -44,6 +44,8 @@ def run_crew_tailoring(
     job_posting_text: str,
     resume_text: str,
     contacts_source: dict[str, Any] | None = None,
+    company_name: str | None = None,
+    job_title: str | None = None,
     model: str | None = None,
     verbose: bool | None = None,
 ) -> dict[str, Any]:
@@ -57,6 +59,9 @@ def run_crew_tailoring(
     if verbose is None:
         verbose = JOB_APP_CREW_VERBOSE
 
+    company = str(company_name or "").strip() or "extract from job posting"
+    title = str(job_title or "").strip() or "extract from job posting"
+
     with tempfile.TemporaryDirectory(prefix="crew_l7_") as tmp:
         out_md = Path(tmp) / "tailored_resume.md"
         crew, resume_task = build_job_application_crew(
@@ -67,6 +72,8 @@ def run_crew_tailoring(
             "personal_writeup": personal_writeup,
             "job_posting_text": job_posting_text,
             "resume_text": resume_text,
+            "company_name": company,
+            "job_title": title,
         }
         logger.info(
             "L7 crew kickoff: writeup=%s chars, resume=%s chars, jd=%s chars",

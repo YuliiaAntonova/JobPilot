@@ -1,12 +1,10 @@
-"""Tests for cv.yml PDF/text parsing helpers."""
+"""Tests for cv.yml normalization helpers (no LLM / LiteParse)."""
 
 from __future__ import annotations
 
 import unittest
 
 from job_application.resume.cv_yml_io import (
-    _parse_yaml_response,
-    clean_yaml_output,
     enrich_cv_basics_from_plain,
     normalize_dates,
     split_experience_sections,
@@ -14,38 +12,6 @@ from job_application.resume.cv_yml_io import (
 
 
 class TestCvYmlIo(unittest.TestCase):
-    def test_clean_yaml_output_strips_fences(self):
-        raw = "```yaml\nbasics:\n  name: Test\n```"
-        self.assertIn("name: Test", clean_yaml_output(raw))
-        self.assertNotIn("```", clean_yaml_output(raw))
-
-    def test_clean_yaml_output_strips_preamble_before_basics(self):
-        raw = (
-            "Here is the converted resume\n"
-            "in YAML format:\n\n"
-            "basics:\n"
-            "  name: Test User\n"
-            "  headline: Engineer\n"
-            "skills: []\n"
-        )
-        cleaned = clean_yaml_output(raw)
-        self.assertTrue(cleaned.startswith("basics:"))
-        self.assertNotIn("Here is the converted", cleaned)
-
-    def test_parse_yaml_response_recovers_preamble_and_colon_in_headline(self):
-        raw = (
-            "Sure — YAML below:\n\n"
-            "basics:\n"
-            "  name: Ada Lovelace\n"
-            "  headline: Mathematician: Analyst\n"
-            "  summary: Pioneer\n"
-            "skills: []\n"
-            "experience: []\n"
-        )
-        data = _parse_yaml_response(raw)
-        self.assertEqual(data["basics"]["name"], "Ada Lovelace")
-        self.assertIn("Mathematician", data["basics"]["headline"])
-
     def test_normalize_dates_shortens_months(self):
         cv = {
             "experience": [{"period": "January 2020 — December 2021", "company": "Co"}],

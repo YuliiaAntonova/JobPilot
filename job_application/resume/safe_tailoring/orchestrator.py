@@ -7,12 +7,18 @@ from typing import Any
 
 import yaml
 
-from job_application.config import JOB_APP_CREW_VERBOSE, TAILORING_PIPELINE
+from job_application.config import (
+    ALLOW_LEGACY_TAILORING,
+    JOB_APP_CREW_VERBOSE,
+    TAILORING_PIPELINE,
+)
+from job_application.infra.llm.usage import pack_and_log_token_usage
 from job_application.resume.cv_schema import normalize_to_cv
+from job_application.resume.jobbert_match import (
+    derive_semantic_groups,
+    run_jobbert_match_score,
+)
 from job_application.resume.profile_text import structured_profile_to_plain_text
-from job_application.shared.llm.tokens import pack_token_usage
-
-from job_application.resume.safe_tailoring import _core as core
 
 logger = logging.getLogger("job_application.safe_tailoring")
 
@@ -66,7 +72,7 @@ def confirmed_facts_from_selection(
                             if str(x).strip()
                         ],
                         "semantic_groups": item.get("semantic_groups")
-                        or core._derive_semantic_groups(proposed_fact),
+                        or derive_semantic_groups(proposed_fact),
                         "source": "human_batch_selection",
                     }
                 )
@@ -103,6 +109,15 @@ def confirmed_facts_from_selection(
 def _pipeline_mode() -> str:
     mode = (TAILORING_PIPELINE or "crew_l7").strip().lower()
     if mode in ("notebook", "notebook_untitled", "legacy"):
+        if not ALLOW_LEGACY_TAILORING:
+            raise ValueError(
+                "Legacy notebook tailor is disabled. "
+                "Set ALLOW_LEGACY_TAILORING=1 or use TAILORING_PIPELINE=crew_l7."
+            )
+        logger.warning(
+            "Using legacy notebook tailor (TAILORING_PIPELINE=%s). Prefer crew_l7.",
+            mode,
+        )
         return "notebook"
     return "crew_l7"
 
@@ -125,6 +140,75 @@ def _write_preview(tailored_structured: dict[str, Any]) -> dict[str, str] | None
     return cv_preview
 
 
+def _resolve_job_meta(
+    *,
+    company_name: str | None = None,
+    job_title: str | None = None,
+    analysis: dict[str, Any] | None = None,
+) -> tuple[str, str]:
+    company = str(company_name or "").strip()
+    title = str(job_title or "").strip()
+    if isinstance(analysis, dict):
+        if not company:
+            company = str(
+                analysis.get("company_name")
+                or analysis.get("company")
+                or ""
+            ).strip()
+        if not title:
+            title = str(
+                analysis.get("job_title")
+                or analysis.get("target_job_title")
+                or ""
+            ).strip()
+    return company, title
+
+
+def _apply_target_meta_to_structured(
+    tailored_structured: dict[str, Any],
+    *,
+    company_name: str = "",
+    job_title: str = "",
+) -> None:
+    """Replace leftover LLM placeholders like [Company Name] in summary/headline."""
+    company = str(company_name or "").strip()
+    title = str(job_title or "").strip()
+    if not company and not title:
+        return
+    basics = tailored_structured.get("basics")
+    if not isinstance(basics, dict):
+        return
+
+    def _scrub(text: str) -> str:
+        out = text
+        if company:
+            for ph in (
+                "[Company Name]",
+                "[company name]",
+                "[COMPANY NAME]",
+                "[Company]",
+                "[company]",
+            ):
+                out = out.replace(ph, company)
+        if title:
+            for ph in (
+                "[Job Title]",
+                "[job title]",
+                "[JOB TITLE]",
+                "[Role]",
+                "[role]",
+                "[Position]",
+                "[position]",
+            ):
+                out = out.replace(ph, title)
+        return out
+
+    for key in ("summary", "headline", "label"):
+        raw = basics.get(key)
+        if isinstance(raw, str) and raw.strip():
+            basics[key] = _scrub(raw)
+
+
 # ---------------------------------------------------------------------------
 # L7 CrewAI path
 # ---------------------------------------------------------------------------
@@ -137,6 +221,8 @@ def _run_analyze_crew_l7(
     resume_text: str | None = None,
     model: str | None = None,
     include_jobbert: bool = True,
+    company_name: str | None = None,
+    job_title: str | None = None,
 ) -> dict[str, Any]:
     from job_application.resume.crew_tailoring.adapter import build_crew_kickoff_inputs
 
@@ -151,7 +237,13 @@ def _run_analyze_crew_l7(
             raise ValueError("structured profile is required (chat or PDF → cv.yml) for L7 tailoring")
         raise ValueError("structured profile is required (chat or PDF → cv.yml) for L7 tailoring")
 
-    inputs = build_crew_kickoff_inputs(structured=structured, job_description=jd)
+    company, title = _resolve_job_meta(company_name=company_name, job_title=job_title)
+    inputs = build_crew_kickoff_inputs(
+        structured=structured,
+        job_description=jd,
+        company_name=company,
+        job_title=title,
+    )
     resume_md = inputs["resume_text"]
     if len(resume_md) < 80:
         raise ValueError("Resume is too short for tailoring")
@@ -161,7 +253,7 @@ def _run_analyze_crew_l7(
 
     jobbert_before = None
     if include_jobbert:
-        jobbert_before = core.run_jobbert_match_score(
+        jobbert_before = run_jobbert_match_score(
             resume_yaml,
             jd,
             structured=parsed_cv,
@@ -172,12 +264,14 @@ def _run_analyze_crew_l7(
         "pipeline": "crew_l7",
         "personal_writeup": inputs["personal_writeup"],
         "resume_text": resume_md,
-        "job_posting_text": jd,
+        "job_posting_text": inputs["job_posting_text"],
         "github_url": inputs.get("github_url") or "",
         "resume_plain_text": structured_profile_to_plain_text(parsed_cv),
+        "company_name": company,
+        "job_title": title,
     }
 
-    token_usage = pack_token_usage(
+    token_usage = pack_and_log_token_usage(
         "crew_l7_analyze",
         model or "openai",
         [],
@@ -204,10 +298,15 @@ def _run_generate_crew_l7(
     selected_ids: list[str] | None = None,
     model: str | None = None,
     include_jobbert: bool = True,
+    company_name: str | None = None,
+    job_title: str | None = None,
 ) -> dict[str, Any]:
     del selected_ids, resume_text
 
-    from job_application.resume.crew_tailoring.adapter import build_crew_kickoff_inputs
+    from job_application.resume.crew_tailoring.adapter import (
+        build_crew_kickoff_inputs,
+        enrich_job_posting_text,
+    )
     from job_application.resume.crew_tailoring.runner import run_crew_tailoring
     from job_application.resume.crew_tailoring.utils import get_openai_model_name
 
@@ -219,15 +318,31 @@ def _run_generate_crew_l7(
     if not isinstance(structured, dict) or not structured:
         raise ValueError("structured profile is required to generate cv_tailored (chat or PDF → cv.yml).")
 
+    company, title = _resolve_job_meta(
+        company_name=company_name,
+        job_title=job_title,
+        analysis=analysis,
+    )
+
     personal_writeup = str(analysis.get("personal_writeup") or "").strip()
     resume_md = str(analysis.get("resume_text") or "").strip()
     job_posting = str(analysis.get("job_posting_text") or jd).strip() or jd
+    job_posting = enrich_job_posting_text(
+        job_posting,
+        company_name=company,
+        job_title=title,
+    )
 
     if not personal_writeup or not resume_md:
-        rebuilt = build_crew_kickoff_inputs(structured=structured, job_description=jd)
+        rebuilt = build_crew_kickoff_inputs(
+            structured=structured,
+            job_description=jd,
+            company_name=company,
+            job_title=title,
+        )
         personal_writeup = personal_writeup or rebuilt["personal_writeup"]
         resume_md = resume_md or rebuilt["resume_text"]
-        job_posting = jd
+        job_posting = rebuilt["job_posting_text"]
 
     openai_model = get_openai_model_name()
     # Prefer OPENAI_MODEL_NAME; ignore cursor:/groq: UI model for exact L7
@@ -239,6 +354,8 @@ def _run_generate_crew_l7(
         job_posting_text=job_posting,
         resume_text=resume_md,
         contacts_source=normalize_to_cv(structured),
+        company_name=company,
+        job_title=title,
         model=openai_model,
         verbose=JOB_APP_CREW_VERBOSE,
     )
@@ -251,6 +368,12 @@ def _run_generate_crew_l7(
         if not str(dst_basics.get("name") or "").strip() and src_basics.get("name"):
             dst_basics["name"] = src_basics["name"]
 
+    _apply_target_meta_to_structured(
+        tailored_structured,
+        company_name=company,
+        job_title=title,
+    )
+
     cv_preview = _write_preview(tailored_structured)
     tailored_yaml = yaml.safe_dump(
         tailored_structured, sort_keys=False, allow_unicode=True, width=120
@@ -259,14 +382,14 @@ def _run_generate_crew_l7(
 
     jobbert_after = None
     if include_jobbert:
-        jobbert_after = core.run_jobbert_match_score(
+        jobbert_after = run_jobbert_match_score(
             tailored_yaml,
             jd,
             structured=tailored_structured,
             phase="after crew_l7 tailoring",
         )
 
-    token_usage = pack_token_usage(
+    token_usage = pack_and_log_token_usage(
         "crew_l7_generate",
         crew_out.get("model") or openai_model,
         crew_out.get("usage_calls") or [],
@@ -336,7 +459,7 @@ def _run_analyze_notebook(
 
     jobbert_before = None
     if include_jobbert and parsed_cv is not None:
-        jobbert_before = core.run_jobbert_match_score(
+        jobbert_before = run_jobbert_match_score(
             resume_yaml,
             jd,
             structured=parsed_cv,
@@ -365,7 +488,7 @@ def _run_analyze_notebook(
         "resume_plain_text": plain,
     }
 
-    token_usage = pack_token_usage("notebook_tailoring_analyze", model, nb.llm.get_usage_calls())
+    token_usage = pack_and_log_token_usage("notebook_tailoring_analyze", model, nb.llm.get_usage_calls())
 
     return {
         "phase": "ready_to_generate",
@@ -446,14 +569,14 @@ def _run_generate_notebook(
 
     jobbert_after = None
     if include_jobbert:
-        jobbert_after = core.run_jobbert_match_score(
+        jobbert_after = run_jobbert_match_score(
             tailored_yaml,
             jd,
             structured=tailored_structured,
             phase="after notebook tailoring",
         )
 
-    token_usage = pack_token_usage(
+    token_usage = pack_and_log_token_usage(
         "notebook_tailoring_generate",
         model,
         nb.llm.get_usage_calls() or result.get("llm_calls") or [],
@@ -501,6 +624,8 @@ def run_analyze(
     resume_text: str | None = None,
     model: str | None = None,
     include_jobbert: bool = True,
+    company_name: str | None = None,
+    job_title: str | None = None,
 ) -> dict[str, Any]:
     if _pipeline_mode() == "notebook":
         return _run_analyze_notebook(
@@ -516,6 +641,8 @@ def run_analyze(
         resume_text=resume_text,
         model=model,
         include_jobbert=include_jobbert,
+        company_name=company_name,
+        job_title=job_title,
     )
 
 
@@ -528,6 +655,8 @@ def run_generate(
     selected_ids: list[str] | None = None,
     model: str | None = None,
     include_jobbert: bool = True,
+    company_name: str | None = None,
+    job_title: str | None = None,
 ) -> dict[str, Any]:
     # Honor analysis.pipeline if present (session started on a given mode)
     analysis_pipeline = ""
@@ -555,6 +684,8 @@ def run_generate(
         selected_ids=selected_ids,
         model=model,
         include_jobbert=include_jobbert,
+        company_name=company_name,
+        job_title=job_title,
     )
 
 

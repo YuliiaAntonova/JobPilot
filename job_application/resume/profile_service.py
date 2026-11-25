@@ -405,6 +405,22 @@ def _merge_personal_fields(old: dict, new: dict) -> dict:
     return merged
 
 
+def _run_coro_sync(coro):
+    """Run async RAG helpers from sync FastAPI routes / tests."""
+    import asyncio
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    import nest_asyncio
+
+    nest_asyncio.apply()
+    loop = asyncio.get_event_loop()
+    return loop.run_until_complete(coro)
+
+
 def _rebuild_structured_from_tailored_plain(
     row: ResumeProfile,
     plain: str,
@@ -412,13 +428,19 @@ def _rebuild_structured_from_tailored_plain(
     desired_role: str = "",
     llm_model: str | None = None,
 ) -> dict:
-    from job_application.resume.cv_yml_io import resume_text_to_structured
+    from job_application.resume.cv_schema import normalize_to_cv
+    from job_application.resume.cv_yaml import harvard_cv_to_structured
+    from job_application.resume.rag_prepare import fill_cv_from_text
+    from job_application.resume.rag_prepare.normalize import l7_json_to_slim_cv
 
     old_structured = row.structured if isinstance(row.structured, dict) else {}
     old_answers = row.chat_answers if isinstance(row.chat_answers, dict) else {}
-    extracted = resume_text_to_structured(plain, model=llm_model or APP_LLM_MODEL)
-    if not isinstance(extracted, dict):
+    filled, _plain, _usage = _run_coro_sync(
+        fill_cv_from_text(plain, llm_model=llm_model or APP_LLM_MODEL)
+    )
+    if not isinstance(filled, dict):
         raise ValueError("LLM returned an invalid resume structure")
+    extracted = harvard_cv_to_structured(normalize_to_cv(l7_json_to_slim_cv(filled)))
 
     merged = _merge_cv_structured(old_structured, extracted)
     merged = attach_resume_plain_text(merged, plain)

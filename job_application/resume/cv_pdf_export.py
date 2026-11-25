@@ -1,17 +1,32 @@
-"""PDF export: cv.yml → cv/render.py → Chrome headless (workshop pipeline)."""
+"""PDF export: structured CV → cv.yml → Harvard HTML → Chrome headless."""
 
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
 
 from job_application.config import CV_CHROME_BIN, CV_PDF_FILENAME, CV_PREVIEW_DIR, REPO_ROOT
 from job_application.resume.cv_schema import CV_META_KEYS, normalize_to_cv
-from job_application.resume.cv_workshop import pdf_to_yml_module, render_module
+from job_application.resume.cv_yml_io import write_cv_yml
+from job_application.resume.pdf import render_cv_yml_to_html
 
 logger = logging.getLogger(__name__)
+
+
+def _chrome_container_flags() -> list[str]:
+    """Headless Chromium in Docker needs --no-sandbox / smaller /dev/shm."""
+    forced = os.getenv("JOB_APP_CHROME_NO_SANDBOX", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    if forced or Path("/.dockerenv").is_file():
+        return ["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
+    return []
 
 
 def cv_preview_paths() -> tuple[Path, Path]:
@@ -34,10 +49,8 @@ def write_job_tailored_draft_preview(structured: dict[str, Any]) -> tuple[Path, 
     yml_path, html_path = job_tailored_draft_preview_paths()
     cv = structured_to_workshop_cv(structured)
 
-    pdf_to_yml = pdf_to_yml_module()
-    render = render_module()
-    yml_path = pdf_to_yml.write_cv_yml(cv, yml_path)
-    render.render_cv_yml_to_html(yml_path, html_path)
+    yml_path = write_cv_yml(cv, yml_path)
+    render_cv_yml_to_html(yml_path, html_path)
     return yml_path, html_path
 
 
@@ -55,7 +68,7 @@ def structured_to_workshop_cv(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 def write_workshop_yml_and_html(structured: dict[str, Any]) -> tuple[Path, Path]:
-    """cv/pdf_to_yml_llm.write_cv_yml + cv/render.render_cv_yml_to_html."""
+    """normalize → write_cv_yml + render_cv_yml_to_html."""
     if not isinstance(structured, dict) or not structured:
         raise ValueError("structured profile is empty")
 
@@ -63,16 +76,14 @@ def write_workshop_yml_and_html(structured: dict[str, Any]) -> tuple[Path, Path]
     yml_path, html_path = cv_preview_paths()
     cv = structured_to_workshop_cv(structured)
 
-    pdf_to_yml = pdf_to_yml_module()
-    render = render_module()
-    yml_path = pdf_to_yml.write_cv_yml(cv, yml_path)
-    render.render_cv_yml_to_html(yml_path, html_path)
+    yml_path = write_cv_yml(cv, yml_path)
+    render_cv_yml_to_html(yml_path, html_path)
     return yml_path, html_path
 
 
 def chrome_html_to_pdf(html_path: Path, pdf_path: Path) -> None:
     """
-    Print HTML to PDF via headless Chrome (workshop command).
+    Print HTML to PDF via headless Chrome.
 
     "/Applications/Google Chrome.app/.../Google Chrome"
       --headless --no-pdf-header-footer
@@ -94,6 +105,7 @@ def chrome_html_to_pdf(html_path: Path, pdf_path: Path) -> None:
         str(chrome),
         "--headless",
         "--no-pdf-header-footer",
+        *_chrome_container_flags(),
         f"--print-to-pdf={pdf_path}",
         html_path.as_uri(),
     ]
@@ -105,7 +117,7 @@ def chrome_html_to_pdf(html_path: Path, pdf_path: Path) -> None:
 
 
 def render_structured_resume_pdf_bytes(structured: dict[str, Any]) -> bytes:
-    """structured JSON → cv.yml → cv.html (render.py) → PDF (Chrome)."""
+    """structured JSON → cv.yml → cv.html → PDF (Chrome)."""
     _yml_path, html_path = write_workshop_yml_and_html(structured)
     pdf_path = cv_pdf_path()
     chrome_html_to_pdf(html_path, pdf_path)
@@ -120,7 +132,7 @@ def render_structured_resume_pdf_bytes(structured: dict[str, Any]) -> bytes:
 
 
 def html_to_pdf_bytes(html_content: str, *, html_path: Path | None = None) -> bytes:
-    """Write HTML to disk and print with Chrome (replaces PyMuPDF html_to_pdf_bytes)."""
+    """Write HTML to disk and print with Chrome."""
     CV_PREVIEW_DIR.mkdir(parents=True, exist_ok=True)
     target_html = html_path or (CV_PREVIEW_DIR / "_print.html")
     target_html.write_text(html_content, encoding="utf-8")

@@ -6,21 +6,9 @@ import copy
 import re
 from typing import Any
 
+from job_application.cover_letter.service import resume_plain_text_for_letter as resume_plain_text_for_tailoring
 from job_application.resume.cv_schema import is_cv_structured, normalize_to_cv
 from job_application.resume.profile_text import structured_profile_to_plain_text
-
-
-def resume_plain_text_for_tailoring(
-    *,
-    structured: dict[str, Any] | None,
-    resume_text: str | None,
-) -> str:
-    if isinstance(structured, dict) and structured:
-        return structured_profile_to_plain_text(structured).strip()
-    text = (resume_text or "").strip()
-    if not text:
-        raise ValueError("structured profile or resume_text is required.")
-    return text
 
 
 def _bullets_from_achievements(achievements: Any) -> list[str]:

@@ -26,20 +26,48 @@ def _resolve_jwt_secret(raw: str) -> str:
 DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 
 DATA_ROOT = Path(os.getenv("JOB_APP_DATA_ROOT", str(REPO_ROOT / "data")))
-JOBS_DIR = DATA_ROOT / "jobs"
+# Prefer data/storage/jobs; fall back to legacy data/jobs if that dir already exists.
+_JOBS_DEFAULT = DATA_ROOT / "storage" / "jobs"
+_JOBS_LEGACY = DATA_ROOT / "jobs"
+JOBS_DIR = Path(
+    os.getenv(
+        "JOB_APP_JOBS_DIR",
+        str(_JOBS_LEGACY if _JOBS_LEGACY.is_dir() and not _JOBS_DEFAULT.is_dir() else _JOBS_DEFAULT),
+    )
+).expanduser()
 
 # LLM по умолчанию (override with APP_LLM_MODEL env).
-# cursor:composer-2.5 — Cursor SDK (CURSOR_API_KEY); groq:..., openai:..., google:... — aisuite.
+# openai:gpt-4o-mini — основной мозг (профиль, RAG fill, cover letter, ATS).
+# cursor:… — Cursor SDK; groq:… / google:… — aisuite.
+# CrewAI tailor отдельно: OPENAI_MODEL_NAME (тоже gpt-4o-mini по умолчанию).
 # При 429/TPM см. повторные попытки в llm.chat_completion_text: JOB_APP_LLM_RATELIMIT_RETRIES (default 8).
 # Подробные print-этапы пайплайна: JOB_APP_PIPELINE_VERBOSE=1 (логируется только при True).
-APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "cursor:composer-2.5")
+APP_LLM_MODEL = os.getenv("APP_LLM_MODEL", "openai:gpt-4o-mini")
 CURSOR_API_KEY = os.getenv("CURSOR_API_KEY", "").strip()
 CURSOR_MODEL = os.getenv("CURSOR_MODEL", "composer-2.5").strip() or "composer-2.5"
-# Fallback when Cursor Agent fails during resume → cv.yml (groq:… / openai:…).
-CV_YAML_LLM_FALLBACK = os.getenv("CV_YAML_LLM_FALLBACK", "").strip()
+# LlamaCloud Parse for resume PDF → RAG prepare.
+LLAMA_CLOUD_API_KEY = os.getenv("LLAMA_CLOUD_API_KEY", "").strip()
+LLAMA_CLOUD_BASE_URL = os.getenv("LLAMA_CLOUD_BASE_URL", "").strip()
+EMBED_BACKEND = (os.getenv("EMBED_BACKEND") or "huggingface").strip().lower()
+EMBED_MODEL_NAME = os.getenv("EMBED_MODEL_NAME", "BAAI/bge-small-en-v1.5").strip()
+_RAG_DEFAULT = DATA_ROOT / "storage" / "rag"
+_RAG_LEGACY = DATA_ROOT / "rag_storage"
+RAG_PREPARE_STORAGE = Path(
+    os.getenv(
+        "RAG_PREPARE_STORAGE",
+        str(_RAG_LEGACY if _RAG_LEGACY.is_dir() and not _RAG_DEFAULT.is_dir() else _RAG_DEFAULT),
+    )
+).expanduser()
 
 # Resume tailor: crew_l7 (default, L7 CrewAI + OpenAI) or notebook (legacy Untitled pipeline).
 TAILORING_PIPELINE = os.getenv("TAILORING_PIPELINE", "crew_l7").strip() or "crew_l7"
+# Legacy notebook tailor / cover-letter notebook path. Set 0 to refuse TAILORING_PIPELINE=notebook.
+ALLOW_LEGACY_TAILORING = os.getenv("ALLOW_LEGACY_TAILORING", "1").strip().lower() in (
+    "1",
+    "true",
+    "yes",
+    "on",
+)
 # CrewAI / markdown_to_cv_json (exact L7 behavior).
 OPENAI_MODEL_NAME = os.getenv("OPENAI_MODEL_NAME", "gpt-4o-mini").strip() or "gpt-4o-mini"
 # Live CrewAI agent logs in uvicorn/CLI (Working Agent / Starting Task / Final Answer).
@@ -89,13 +117,13 @@ JWT_SECRET = _resolve_jwt_secret(_JWT_SECRET_RAW)
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRE_HOURS = max(1, int(os.getenv("JOB_APP_JWT_EXPIRE_HOURS", "168")))
 
-# Local cv.yml / cv.html preview while editing resume in chat (workshop files).
+# Local cv.yml / cv.html preview while editing resume in chat.
 CV_PREVIEW_DIR = Path(
-    os.getenv("CV_PREVIEW_DIR", str(REPO_ROOT / "cv" / "yuliia_old"))
+    os.getenv("CV_PREVIEW_DIR", str(DATA_ROOT / "output" / "preview"))
 ).expanduser().resolve()
 CV_PREVIEW_ENABLED = os.getenv("CV_PREVIEW_ENABLED", "1").strip().lower() in ("1", "true", "yes")
 
-# Workshop PDF: cv/render.py → Chrome headless (--print-to-pdf).
+# Harvard HTML → Chrome/Chromium headless (--print-to-pdf).
 CV_CHROME_BIN = os.getenv(
     "CV_CHROME_BIN",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",

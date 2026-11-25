@@ -111,7 +111,8 @@ class TestProfileExperienceMapping(unittest.TestCase):
 
         seed = structured_to_chat_answers({"_resume_plain_text": text, "personal": {"full_name": "Y"}})
         self.assertEqual(seed["exp_1_company"], "Self-employed")
-        self.assertIn("August 2023", seed["exp_1_period"])
+        # normalize_to_cv abbreviates month names (August → Aug)
+        self.assertIn("Aug 2023", seed["exp_1_period"])
         self.assertIn("HR Forecast", seed["exp_2_company"])
         self.assertIn("Ray", seed["exp_2_bullets"])
 

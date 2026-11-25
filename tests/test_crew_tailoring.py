@@ -103,6 +103,49 @@ def test_build_crew_kickoff_inputs_mapping():
     assert "github.com/jane" in out["github_url"]
 
 
+def test_build_crew_kickoff_inputs_prepends_company_and_title():
+    from job_application.resume.crew_tailoring.adapter import enrich_job_posting_text
+
+    enriched = enrich_job_posting_text(
+        LONG_JD,
+        company_name="Glimmer",
+        job_title="Data Engineer",
+    )
+    assert enriched.startswith("Company: Glimmer\nJob title: Data Engineer\n\n")
+    assert LONG_JD in enriched
+
+    out = build_crew_kickoff_inputs(
+        structured=MINIMAL_CV,
+        job_description=LONG_JD,
+        company_name="Glimmer",
+        job_title="Data Engineer",
+    )
+    assert out["company_name"] == "Glimmer"
+    assert out["job_title"] == "Data Engineer"
+    assert out["job_posting_text"].startswith("Company: Glimmer")
+
+
+def test_apply_target_meta_replaces_company_placeholder():
+    from job_application.resume.safe_tailoring.orchestrator import (
+        _apply_target_meta_to_structured,
+    )
+
+    structured = {
+        "basics": {
+            "summary": "To obtain a Data Engineer position at [Company Name], where I can help.",
+            "headline": "[Job Title]",
+        }
+    }
+    _apply_target_meta_to_structured(
+        structured,
+        company_name="Glimmer",
+        job_title="Data Engineer",
+    )
+    assert "[Company Name]" not in structured["basics"]["summary"]
+    assert "Glimmer" in structured["basics"]["summary"]
+    assert structured["basics"]["headline"] == "Data Engineer"
+
+
 def test_backfill_basics_contacts_overwrites_placeholders():
     filled = {
         "basics": {
@@ -116,6 +159,46 @@ def test_backfill_basics_contacts_overwrites_placeholders():
     assert filled["basics"]["location"] == "Berlin"
     assert filled["basics"]["email"] == "jane@example.com"
     assert filled["basics"]["links"][0]["url"] == "https://github.com/jane"
+
+
+def test_normalize_and_render_prefer_link_labels():
+    from job_application.resume.crew_tailoring.md_to_cv_json import (
+        normalize_basics_link_labels,
+    )
+    from job_application.resume.pdf.render import link_display_text, render_header
+
+    filled = {
+        "basics": {
+            "name": "Yuliia",
+            "location": "Lengerich, Germany",
+            "email": "a@b.com",
+            "phone": "+49 1",
+            "links": [
+                {
+                    "label": "Yuliia Antonova",
+                    "text": "Yuliia Antonova",
+                    "url": "https://www.linkedin.com/in/yuliia",
+                },
+                {
+                    "label": "YuliiaAntonova",
+                    "text": "YuliiaAntonova",
+                    "url": "https://github.com/YuliiaAntonova",
+                },
+                {"label": None, "text": "yuliya25", "url": "https://www.xing.com/profile/yuliya25"},
+            ],
+        }
+    }
+    normalize_basics_link_labels(filled)
+    labels = [ln["label"] for ln in filled["basics"]["links"]]
+    assert labels == ["LinkedIn", "GitHub", "Xing"]
+
+    html = render_header(filled["basics"])
+    assert ">LinkedIn<" in html
+    assert ">GitHub<" in html
+    assert ">Xing<" in html
+    assert ">YuliiaAntonova<" not in html
+    assert ">yuliya25<" not in html
+    assert link_display_text(filled["basics"]["links"][0]) == "LinkedIn"
 
 
 def test_l7_json_selected_projects_maps_to_projects():
@@ -163,7 +246,7 @@ def test_run_analyze_crew_l7_stashes_inputs(monkeypatch):
         "job_application.resume.safe_tailoring.orchestrator._pipeline_mode",
         return_value="crew_l7",
     ), patch(
-        "job_application.resume.safe_tailoring._core.run_jobbert_match_score",
+        "job_application.resume.safe_tailoring.orchestrator.run_jobbert_match_score",
         return_value={"score": 0.5},
     ):
         out = run_analyze(
@@ -231,7 +314,7 @@ def test_run_generate_crew_l7_mocked_kickoff(monkeypatch):
         "job_application.resume.crew_tailoring.runner.run_crew_tailoring",
         return_value=mock_crew_out,
     ), patch(
-        "job_application.resume.safe_tailoring._core.run_jobbert_match_score",
+        "job_application.resume.safe_tailoring.orchestrator.run_jobbert_match_score",
         return_value={"score": 0.7},
     ), patch(
         "job_application.resume.safe_tailoring.orchestrator._write_preview",

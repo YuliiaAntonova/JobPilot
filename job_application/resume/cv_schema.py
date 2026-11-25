@@ -11,7 +11,7 @@ CV_META_KEYS = frozenset({"resume_template", "resume_layout", "chat_format", "_r
 _EXP_KEY = re.compile(r"^exp_(\d+)_(.+)$")
 _JOB_KEY = re.compile(r"^job_(\d+)_(.+)$")
 _SKILL_KEY = re.compile(r"^skill_(\d+)_(group|items)$")
-_PROJ_KEY = re.compile(r"^proj_(\d+)_(name|bullets)$")
+_PROJ_KEY = re.compile(r"^proj_(\d+)_(name|url|bullets)$")
 _EDU_KEY = re.compile(r"^edu_(\d+)_(degree|school|period|note)$")
 _EARLIER_KEY = re.compile(r"^earlier_(\d+)_(period|company|role|location|stack)$")
 
@@ -258,9 +258,13 @@ def _legacy_chat_to_cv(answers: dict[str, str]) -> dict[str, Any]:
     projects: list[dict[str, Any]] = []
     for idx in _indices_from_answers(answers, _PROJ_KEY):
         name = _clean(answers.get(f"proj_{idx}_name") or "")
+        url = _clean(answers.get(f"proj_{idx}_url") or "")
         bullets = _split_bullets(answers.get(f"proj_{idx}_bullets") or "")
-        if name or bullets:
-            projects.append({"name": name or "Project", "bullets": bullets})
+        if name or bullets or url:
+            row: dict[str, Any] = {"name": name or "Project", "bullets": bullets}
+            if url:
+                row["url"] = url
+            projects.append(row)
     if not projects:
         projects_text = _clean(answers.get("projects") or "")
         if projects_text:
@@ -407,6 +411,9 @@ def cv_to_chat_answers(cv: dict[str, Any]) -> dict[str, str]:
         if not isinstance(project, dict):
             continue
         out[f"proj_{idx}_name"] = _clean(project.get("name") or "")
+        url = _clean(project.get("url") or "")
+        if url:
+            out[f"proj_{idx}_url"] = url
         bullets = project.get("bullets") or []
         if isinstance(bullets, list):
             out[f"proj_{idx}_bullets"] = "\n".join(_clean(x) for x in bullets if _clean(x))

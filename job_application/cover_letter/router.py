@@ -1,4 +1,4 @@
-"""Cover letter generation (Untitled.ipynb pipeline)."""
+"""Cover letter generation HTTP API."""
 
 from __future__ import annotations
 
@@ -10,14 +10,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from job_application.config import APP_LLM_MODEL
+from job_application.cover_letter.service import run_cover_letter
 from job_application.models import User
 from job_application.models.db import get_db
 from job_application.repositories import users as db_users
-from job_application.resume.notebook_tailoring.cv_bridge import resume_plain_text_for_tailoring
-from job_application.resume.notebook_tailoring import pipeline as nb
 from job_application.resume.profile_service import structured_for_render_from_profile
 from job_application.routers.deps import get_optional_user
-from job_application.shared.llm.tokens import pack_token_usage
 
 router = APIRouter(prefix="/analyze", tags=["analyze"])
 
@@ -57,41 +55,24 @@ async def generate_cover_letter(
 
     structured = _resolve_structured(db, user, body.structured)
     llm_model = body.model or APP_LLM_MODEL
-
-    try:
-        plain = resume_plain_text_for_tailoring(structured=structured, resume_text=body.resume_text)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
     loop = asyncio.get_running_loop()
 
     def _run() -> dict[str, Any]:
-        nb.llm.configure(llm_model)
-        nb.llm.reset_usage()
-        resume_info = nb.parse_resume(plain)
-        job_info = nb.parse_job_description(jd)
-        from job_application.resume.notebook_tailoring.pipeline import flatten_skills
-
-        job_skills = list(job_info.get("required_skills") or []) + list(
-            job_info.get("preferred_skills") or []
+        return run_cover_letter(
+            job_description=jd,
+            structured=structured,
+            resume_text=body.resume_text,
+            model=llm_model,
         )
-        resume_skills = flatten_skills(resume_info.get("skills") or [])
-        score, matched, _missing = nb.get_skill_match_score(resume_skills, job_skills)
-        letter = nb.generate_cover_letter(resume_info, job_info, score, matched)
-        usage = pack_token_usage("cover_letter", llm_model, nb.llm.get_usage_calls())
-        return {
-            "cover_letter": letter,
-            "match_score": score,
-            "matched_skills": matched,
-            "token_usage": usage,
-        }
 
     try:
         payload = await loop.run_in_executor(None, _run)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         raise HTTPException(status_code=502, detail=f"Cover letter generation error: {e}") from e
 
-    return {"model": llm_model, **payload}
+    return payload
 
 
 @router.post("/cover-letter/analyze")

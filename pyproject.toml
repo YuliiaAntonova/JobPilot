@@ -11,3 +11,6 @@ readme = "README.md"
 
 [tool.setuptools.packages.find]
 include = ["job_application*"]
+
+[tool.setuptools.package-data]
+job_application = ["resume/cv_template.json", "static/app/**/*", "output/templates/**/*"]

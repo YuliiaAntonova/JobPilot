@@ -53,27 +53,42 @@ def visible(entry: dict, variant: str | None) -> bool:
 # Section renderers — each returns an HTML string (or "" to skip).
 # --------------------------------------------------------------------------- #
 
+def _compact_profile_url(url: str) -> str:
+    """github.com/user — readable on paper/PDF, not just the word 'GitHub'."""
+    raw = str(url or "").strip()
+    if not raw:
+        return ""
+    low = raw.lower()
+    for prefix in ("https://", "http://"):
+        if low.startswith(prefix):
+            raw = raw[len(prefix) :]
+            break
+    if raw.lower().startswith("www."):
+        raw = raw[4:]
+    return raw.rstrip("/")
+
+
 def link_display_text(ln: dict) -> str:
-    """Prefer platform label (LinkedIn/GitHub) over raw username for the header."""
+    """
+    Contact-line link text for Harvard header.
+
+    Prefer compact profile URL (github.com/YuliiaAntonova) so GitHub/LinkedIn
+    are obvious on PDF; fall back to platform label / handle.
+    """
     if not isinstance(ln, dict):
         return ""
     label = str(ln.get("label") or "").strip()
     text = str(ln.get("text") or "").strip()
     url = str(ln.get("url") or "").strip()
-    low_url = url.lower()
-    # Infer platform when label is missing or is just a copy of the handle
-    inferred = ""
-    if "linkedin.com" in low_url:
-        inferred = "LinkedIn"
-    elif "github.com" in low_url or "github.io" in low_url:
-        inferred = "GitHub"
-    elif "xing.com" in low_url:
-        inferred = "Xing"
-    if inferred and (not label or label.casefold() == text.casefold()):
-        return inferred
-    if label:
+    compact = _compact_profile_url(url)
+    low = (url or text).lower()
+    if any(h in low for h in ("linkedin.com", "github.com", "github.io", "xing.com")):
+        return compact or label or text
+    if label and label.casefold() != text.casefold():
         return label
-    return text or url
+    if label in {"LinkedIn", "GitHub", "Xing"}:
+        return label
+    return text or compact or label or url
 
 
 def render_header(b: dict) -> str:

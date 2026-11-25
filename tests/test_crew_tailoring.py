@@ -132,18 +132,24 @@ def test_apply_target_meta_replaces_company_placeholder():
 
     structured = {
         "basics": {
-            "summary": "To obtain a Data Engineer position at [Company Name], where I can help.",
-            "headline": "[Job Title]",
+            "name": "Yuliia Antonova - Comprehensive Personal and Professional Profile",
+            "summary": (
+                "To obtain an AI Data Engineer position at [Company Name], where I can help.\n"
+                "This updated resume effectively highlights skills."
+            ),
+            "headline": "Comprehensive Personal and Professional Profile",
         }
     }
     _apply_target_meta_to_structured(
         structured,
-        company_name="Glimmer",
+        company_name="Statista",
         job_title="Data Engineer",
     )
-    assert "[Company Name]" not in structured["basics"]["summary"]
-    assert "Glimmer" in structured["basics"]["summary"]
+    assert structured["basics"]["name"] == "Yuliia Antonova"
     assert structured["basics"]["headline"] == "Data Engineer"
+    assert "AI Data Engineer" not in structured["basics"]["summary"]
+    assert "Data Engineer position at Statista" in structured["basics"]["summary"]
+    assert "This updated resume" not in structured["basics"]["summary"]
 
 
 def test_backfill_basics_contacts_overwrites_placeholders():
@@ -193,12 +199,10 @@ def test_normalize_and_render_prefer_link_labels():
     assert labels == ["LinkedIn", "GitHub", "Xing"]
 
     html = render_header(filled["basics"])
-    assert ">LinkedIn<" in html
-    assert ">GitHub<" in html
-    assert ">Xing<" in html
-    assert ">YuliiaAntonova<" not in html
-    assert ">yuliya25<" not in html
-    assert link_display_text(filled["basics"]["links"][0]) == "LinkedIn"
+    assert "github.com/YuliiaAntonova" in html
+    assert "linkedin.com/in/yuliia" in html
+    assert "xing.com/profile/yuliya25" in html
+    assert link_display_text(filled["basics"]["links"][1]) == "github.com/YuliiaAntonova"
 
 
 def test_l7_json_selected_projects_maps_to_projects():

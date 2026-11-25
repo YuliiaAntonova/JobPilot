@@ -126,8 +126,8 @@ export default function OfferResumeSection({
     // Never re-run JobBERT here — top "Calculate score" already did it
     const company =
       String(companyName || analysis?.company_name || analysis?.company || "").trim();
-    const title =
-      String(jobTitle || analysis?.job_title || analysis?.target_job_title || "").trim();
+    // Prefer the Job title form field; ignore LLM "target_job_title" leftovers
+    const title = String(jobTitle || analysis?.job_title || "").trim();
     const r = await authFetchWithTimeout("/analyze/resume-tailor/analyze", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -162,7 +162,6 @@ export default function OfferResumeSection({
     analysis?.company_name,
     analysis?.job_title,
     analysis?.match_score,
-    analysis?.target_job_title,
     companyName,
     jdText,
     jobTitle,
@@ -315,8 +314,7 @@ export default function OfferResumeSection({
       }
       const company =
         String(companyName || analysis?.company_name || analysis?.company || "").trim();
-      const title =
-        String(jobTitle || analysis?.job_title || analysis?.target_job_title || "").trim();
+      const title = String(jobTitle || analysis?.job_title || "").trim();
       const r = await authFetchWithTimeout("/analyze/resume-tailor/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },

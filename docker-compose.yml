@@ -29,7 +29,10 @@ services:
       JOB_APP_DATA_ROOT: /app/data
       CV_PREVIEW_DIR: /app/data/output/preview
       CV_CHROME_BIN: /usr/bin/chromium
-      MATCH_SCORE_WARMUP: "0"
+      # Preload JobBERT + MiniLM at startup so Calculate score is not cold on first click
+      MATCH_SCORE_WARMUP: "1"
+      HF_HOME: /app/data/.cache/huggingface
+      SENTENCE_TRANSFORMERS_HOME: /app/data/.cache/huggingface
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:

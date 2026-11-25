@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import yaml
@@ -156,12 +157,33 @@ def _resolve_job_meta(
                 or ""
             ).strip()
         if not title:
-            title = str(
-                analysis.get("job_title")
-                or analysis.get("target_job_title")
-                or ""
-            ).strip()
+            title = str(analysis.get("job_title") or "").strip()
+        if not title:
+            # Only use previous LLM headline if it looks like a real job title
+            maybe = str(analysis.get("target_job_title") or "").strip()
+            if maybe and not _looks_like_bad_headline(maybe):
+                title = maybe
     return company, title
+
+
+_BAD_HEADLINE_RE = re.compile(
+    r"(?i)comprehensive\s+personal|professional\s+profile|"
+    r"updated\s+resume\s+effectively|personal\s+and\s+professional\s+profile"
+)
+_OBJECTIVE_ROLE_RE = re.compile(
+    r"(?i)(to obtain (?:an?|the)\s+)(.+?)(\s+position\s+at\s+)([^,\n]+)"
+)
+_META_TAIL_RE = re.compile(r"(?is)\n*This updated resume effectively.*$")
+
+
+def _looks_like_bad_headline(text: str) -> bool:
+    raw = str(text or "").strip()
+    if not raw:
+        return True
+    if _BAD_HEADLINE_RE.search(raw):
+        return True
+    # Long essay-like headlines are never Harvard-style
+    return len(raw) > 80
 
 
 def _apply_target_meta_to_structured(
@@ -170,16 +192,14 @@ def _apply_target_meta_to_structured(
     company_name: str = "",
     job_title: str = "",
 ) -> None:
-    """Replace leftover LLM placeholders like [Company Name] in summary/headline."""
+    """Force form company/title into Objective; scrub profiler title leaks."""
     company = str(company_name or "").strip()
     title = str(job_title or "").strip()
-    if not company and not title:
-        return
     basics = tailored_structured.get("basics")
     if not isinstance(basics, dict):
         return
 
-    def _scrub(text: str) -> str:
+    def _scrub_placeholders(text: str) -> str:
         out = text
         if company:
             for ph in (
@@ -203,10 +223,34 @@ def _apply_target_meta_to_structured(
                 out = out.replace(ph, title)
         return out
 
-    for key in ("summary", "headline", "label"):
-        raw = basics.get(key)
-        if isinstance(raw, str) and raw.strip():
-            basics[key] = _scrub(raw)
+    headline = _scrub_placeholders(str(basics.get("headline") or "").strip())
+    if title:
+        # Job title field from the offer form wins over JD-invented titles
+        basics["headline"] = title
+    elif _looks_like_bad_headline(headline):
+        basics["headline"] = ""
+    else:
+        basics["headline"] = headline
+
+    summary = _META_TAIL_RE.sub("", str(basics.get("summary") or "").strip()).strip()
+    summary = _scrub_placeholders(summary)
+    if title or company:
+
+        def _repl(match: re.Match[str]) -> str:
+            role = title or match.group(2).strip()
+            firm = company or match.group(4).strip()
+            return f"{match.group(1)}{role}{match.group(3)}{firm}"
+
+        if _OBJECTIVE_ROLE_RE.search(summary):
+            summary = _OBJECTIVE_ROLE_RE.sub(_repl, summary, count=1)
+        elif title and company and not summary:
+            summary = f"To obtain a {title} position at {company}."
+    basics["summary"] = summary
+
+    name = str(basics.get("name") or "").strip()
+    if name and "comprehensive" in name.casefold():
+        # e.g. "Yuliia Antonova - Comprehensive Personal..."
+        basics["name"] = re.split(r"\s+[—\-–]\s+", name, maxsplit=1)[0].strip() or name
 
 
 # ---------------------------------------------------------------------------

@@ -159,34 +159,10 @@ def backfill_basics_contacts(
             continue
         if _looks_like_placeholder(dst_basics.get(key)):
             dst_basics[key] = src_val
+    # Always restore profile links (URLs + labels) so GitHub/LinkedIn never vanish
     src_links = src_basics.get("links") or []
-    if src_links and _links_need_backfill(dst_basics.get("links")):
+    if isinstance(src_links, list) and src_links:
         dst_basics["links"] = src_links
-    else:
-        # Keep tailored URLs, but restore platform labels from the source profile
-        dst_links = dst_basics.get("links")
-        if isinstance(dst_links, list) and isinstance(src_links, list) and src_links:
-            by_host: dict[str, dict[str, Any]] = {}
-            for src in src_links:
-                if not isinstance(src, dict):
-                    continue
-                url = str(src.get("url") or "").strip().lower()
-                for host in ("linkedin.com", "github.com", "xing.com"):
-                    if host in url:
-                        by_host[host] = src
-            for dst in dst_links:
-                if not isinstance(dst, dict):
-                    continue
-                url = str(dst.get("url") or "").strip().lower()
-                for host, src in by_host.items():
-                    if host not in url:
-                        continue
-                    src_label = str(src.get("label") or "").strip()
-                    if src_label:
-                        dst["label"] = src_label
-                    if src.get("url") and _looks_like_placeholder(dst.get("url")):
-                        dst["url"] = src["url"]
-                    break
     normalize_basics_link_labels(filled)
 
 

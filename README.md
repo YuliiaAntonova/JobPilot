@@ -33,7 +33,7 @@ docker compose logs -f api
 |---------|------|
 | `docker compose up -d` | Usual start. Fast. Uses existing image. |
 | `docker compose logs -f api` | Watch uvicorn / CrewAI / LLM logs. |
-| `docker compose down` | Stop containers (DB + data volumes keep). |
+| `docker compose down` | Stop API (`app_data` volume keeps). |
 | `docker compose ps` | Status. |
 
 ### 3. When you need `--build`
@@ -56,8 +56,8 @@ docker compose logs -f api
 | What | Where |
 |------|--------|
 | App | http://127.0.0.1:8000/ |
-| Postgres (host) | `localhost:5433` (`jobpilot` / `jobpilot` / `job_application`) |
-| Volumes | `pgdata`, `app_data` — wipe with `docker compose down -v` |
+| Postgres | your Mac DB on `localhost:5432` (Compose has no Postgres). Set `DOCKER_DATABASE_URL` in `.env` (default: `postgres` / `postgres` / `world` via `host.docker.internal`). |
+| Volumes | `app_data` — wipe with `docker compose down -v` |
 
 ## Optional: local without Docker
 

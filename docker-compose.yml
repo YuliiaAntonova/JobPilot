@@ -1,21 +1,5 @@
+# API only — uses your Mac Postgres on localhost:5432 (no Compose Postgres).
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: jobpilot
-      POSTGRES_PASSWORD: jobpilot
-      POSTGRES_DB: job_application
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U jobpilot -d job_application"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    # 5433 on host so local Postgres on 5432 keeps working
-    ports:
-      - "5433:5432"
-
   api:
     build: .
     ports:
@@ -23,9 +7,8 @@ services:
     env_file:
       - .env
     environment:
-      # Default = Compose Postgres. To use Mac Postgres instead, set DOCKER_DATABASE_URL in .env
-      # (host.docker.internal) and start API with: docker compose up -d api --no-deps
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+psycopg2://jobpilot:jobpilot@db:5432/job_application}
+      # Prefer DOCKER_DATABASE_URL (host.docker.internal). Falls back to local world DB.
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql+psycopg2://postgres:postgres@host.docker.internal:5432/world}
       JOB_APP_DATA_ROOT: /app/data
       CV_PREVIEW_DIR: /app/data/output/preview
       CV_CHROME_BIN: /usr/bin/chromium
@@ -37,9 +20,6 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - app_data:/app/data
-    depends_on:
-      db:
-        condition: service_healthy
     healthcheck:
       test:
         [
@@ -54,5 +34,4 @@ services:
       start_period: 60s
 
 volumes:
-  pgdata:
   app_data:
